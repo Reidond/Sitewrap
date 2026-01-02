@@ -4,11 +4,10 @@ use adw::prelude::*;
 use anyhow::{bail, Context, Result};
 use gtk4 as gtk;
 use gtk4::gdk;
+use gtk4::gio;
 use gtk4::glib;
 use sitewrap_icons::fetch_and_cache_icon;
-use sitewrap_model::{
-    normalize_url, AppPaths, PerOriginPermissions, PermissionState, WebAppDefinition, WebAppId,
-};
+use sitewrap_model::{normalize_url, AppPaths, WebAppDefinition, WebAppId};
 use sitewrap_portal::{install_launcher, remove_launcher, warn_if_stubbed, LauncherDescriptor};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -45,7 +44,7 @@ fn launcher_descriptor_for(app: &WebAppDefinition, paths: &AppPaths) -> Launcher
 }
 
 pub fn show(app: &adw::Application, ctx: Rc<AppContext>) -> Result<()> {
-    let builder = builder_from_resource(MANAGER_UI)?;
+    let builder = builder_from_resource(MANAGER_UI);
     let window: adw::ApplicationWindow = builder
         .object("manager_window")
         .context("manager_window missing in blueprint")?;
@@ -72,7 +71,7 @@ pub fn show(app: &adw::Application, ctx: Rc<AppContext>) -> Result<()> {
         dialog.add_response("close", "OK");
         dialog.set_default_response(Some("close"));
         dialog.set_close_response("close");
-        dialog.connect_response(|d, _| d.close());
+        dialog.connect_response(None, |d, _| d.close());
         dialog.present();
     } else {
         warn_if_stubbed();
@@ -120,8 +119,8 @@ fn refresh_listbox(
     query: &str,
     handlers: &Handlers,
 ) {
-    for row in list.children() {
-        list.remove(&row);
+    while let Some(child) = list.first_child() {
+        list.remove(&child);
     }
     let needle = query.trim().to_ascii_lowercase();
     let mut sorted = apps.to_vec();
@@ -132,13 +131,13 @@ fn refresh_listbox(
     });
 
     for app in sorted.iter() {
-        if !needle.is_empty()
-            && !app.name.to_ascii_lowercase().contains(&needle)
-            && !app.start_url.to_ascii_lowercase().contains(&needle)
-            && !app.primary_origin.to_ascii_lowercase().contains(&needle)
-            && !(app.behavior.open_external_links && "external".contains(&needle))
-            && !(app.behavior.show_navigation && "navigation".contains(&needle))
-        {
+        let matches = needle.is_empty()
+            || app.name.to_ascii_lowercase().contains(&needle)
+            || app.start_url.to_ascii_lowercase().contains(&needle)
+            || app.primary_origin.to_ascii_lowercase().contains(&needle)
+            || (app.behavior.open_external_links && "external".contains(&needle))
+            || (app.behavior.show_navigation && "navigation".contains(&needle));
+        if !matches {
             continue;
         }
         let row = make_row(app, handlers);
@@ -171,7 +170,7 @@ fn make_row(app: &WebAppDefinition, handlers: &Handlers) -> gtk::Widget {
     let title = gtk::Label::builder()
         .label(&app.name)
         .xalign(0.0)
-        .css_classes(vec!["title-3".into()])
+        .css_classes(["title-3"])
         .ellipsize(gtk::pango::EllipsizeMode::End)
         .build();
     let subtitle = gtk::Label::builder()
@@ -179,10 +178,10 @@ fn make_row(app: &WebAppDefinition, handlers: &Handlers) -> gtk::Widget {
         .xalign(0.0)
         .ellipsize(gtk::pango::EllipsizeMode::End)
         .wrap(true)
-        .css_classes(vec!["dim-label".into()])
+        .css_classes(["dim-label"])
         .build();
     let behavior_label = gtk::Label::builder()
-        .label(&format!(
+        .label(format!(
             "External: {} • Nav: {}",
             if app.behavior.open_external_links {
                 "On"
@@ -196,12 +195,12 @@ fn make_row(app: &WebAppDefinition, handlers: &Handlers) -> gtk::Widget {
             }
         ))
         .xalign(0.0)
-        .css_classes(vec!["dim-label".into()])
+        .css_classes(["dim-label"])
         .build();
     let last_launched = gtk::Label::builder()
-        .label(&format!("Last launched: {}", format_last_launched(app)))
+        .label(format!("Last launched: {}", format_last_launched(app)))
         .xalign(0.0)
-        .css_classes(vec!["dim-label".into()])
+        .css_classes(["dim-label"])
         .build();
     r#box.append(&title);
     r#box.append(&subtitle);
@@ -279,7 +278,7 @@ fn icon_widget(app: &WebAppDefinition, paths: &AppPaths) -> gtk::Widget {
         .icons_cache_dir()
         .join(format!("{}-{}x{}.png", app.icon_id, 128, 128));
     let image = if icon_path.exists() {
-        match gdk::Texture::from_filename(icon_path) {
+        match gdk::Texture::from_file(&gio::File::for_path(&icon_path)) {
             Ok(tex) => {
                 let img = gtk::Image::from_paintable(Some(&tex));
                 img.set_pixel_size(icon_size);
@@ -317,16 +316,16 @@ fn confirm_reset(handlers: &Handlers, app: &WebAppDefinition) {
     dialog.add_response("reset", "Reset");
     dialog.set_default_response(Some("cancel"));
     dialog.set_close_response("cancel");
-    dialog.connect_response(
-        glib::clone!(@strong handlers.clone(), @strong app.clone() => move |d, resp| {
-            if resp == "reset" {
-                if let Err(err) = run_reset(&handlers, &app) {
-                    tracing::error!(target: "ui", "reset failed: {err:?}");
-                }
+    let handlers = handlers.clone();
+    let app = app.clone();
+    dialog.connect_response(None, move |d, resp| {
+        if resp == "reset" {
+            if let Err(err) = run_reset(&handlers, &app) {
+                tracing::error!(target: "ui", "reset failed: {err:?}");
             }
-            d.close();
-        }),
-    );
+        }
+        d.close();
+    });
     dialog.present();
 }
 
@@ -340,16 +339,16 @@ fn confirm_remove(handlers: &Handlers, app: &WebAppDefinition) {
     dialog.add_response("remove", "Remove");
     dialog.set_default_response(Some("cancel"));
     dialog.set_close_response("cancel");
-    dialog.connect_response(
-        glib::clone!(@strong handlers.clone(), @strong app.clone() => move |d, resp| {
-            if resp == "remove" {
-                if let Err(err) = run_remove(&handlers, &app) {
-                    tracing::error!(target: "ui", "remove failed: {err:?}");
-                }
+    let handlers = handlers.clone();
+    let app = app.clone();
+    dialog.connect_response(None, move |d, resp| {
+        if resp == "remove" {
+            if let Err(err) = run_remove(&handlers, &app) {
+                tracing::error!(target: "ui", "remove failed: {err:?}");
             }
-            d.close();
-        }),
-    );
+        }
+        d.close();
+    });
     dialog.present();
 }
 
@@ -445,7 +444,7 @@ fn open_edit_window(handlers: &Handlers, app: &WebAppDefinition) -> Result<()> {
         .build();
     let error_label = gtk::Label::builder()
         .xalign(0.0)
-        .css_classes(vec!["error".into()])
+        .css_classes(["error"])
         .wrap(true)
         .build();
 
@@ -456,8 +455,7 @@ fn open_edit_window(handlers: &Handlers, app: &WebAppDefinition) -> Result<()> {
         .build();
     let cancel_btn = gtk::Button::with_label("Cancel");
     let save_btn = gtk::Button::with_label("Save");
-    save_btn.set_can_default(true);
-    save_btn.grab_default();
+    save_btn.add_css_class("suggested-action");
     button_row.append(&cancel_btn);
     button_row.append(&save_btn);
 
@@ -561,7 +559,6 @@ fn handle_edit(
         .cloned()
         .unwrap();
     let paths = handlers.ctx.paths.clone();
-    let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
     thread::spawn(move || {
         if url_changed {
             if let Ok(url) = Url::parse(&app_clone.start_url) {
@@ -570,12 +567,6 @@ fn handle_edit(
         }
         let descriptor = launcher_descriptor_for(&app_clone, &paths);
         let _ = install_launcher(&descriptor);
-        let _ = sender.send(());
-    });
-    let handlers_clone = handlers.clone();
-    receiver.attach(None, move |_| {
-        refresh_current(&handlers_clone);
-        glib::Continue(false)
     });
 
     Ok(())
@@ -619,7 +610,7 @@ fn open_create_window(
     let show_nav_switch = gtk::Switch::builder().active(false).build();
     let error_label = gtk::Label::builder()
         .xalign(0.0)
-        .css_classes(vec!["error".into()])
+        .css_classes(["error"])
         .wrap(true)
         .build();
 
@@ -630,8 +621,7 @@ fn open_create_window(
         .build();
     let cancel_btn = gtk::Button::with_label("Cancel");
     let create_btn = gtk::Button::with_label("Create");
-    create_btn.set_can_default(true);
-    create_btn.grab_default();
+    create_btn.add_css_class("suggested-action");
     button_row.append(&cancel_btn);
     button_row.append(&create_btn);
 
@@ -723,8 +713,10 @@ fn open_permissions_window_manager(handlers: &Handlers, app: &WebAppDefinition) 
         repo: &sitewrap_model::PermissionRepository,
         app_id: WebAppId,
     ) {
-        for child in page.children() {
-            page.remove(&child);
+        while let Some(child) = page.first_child() {
+            if let Some(group) = child.downcast_ref::<adw::PreferencesGroup>() {
+                page.remove(group);
+            }
         }
 
         let mut origins: Vec<(String, sitewrap_model::PerOriginPermissions)> = store
@@ -785,7 +777,7 @@ fn open_permissions_window_manager(handlers: &Handlers, app: &WebAppDefinition) 
         let page_clone = page.clone();
         let store_clone = Rc::clone(store);
         let repo_clone = repo.clone();
-        add_origin_row(page, move |origin| {
+        add_origin_row(page.clone(), move |origin| {
             store_clone.borrow_mut().get_or_default_mut(origin);
             if let Err(err) = repo_clone.save(app_id, &store_clone.borrow()) {
                 tracing::error!(target: "ui", "save permissions failed: {err:?}");
@@ -830,18 +822,12 @@ fn handle_create(
 
     let paths = handlers.ctx.paths.clone();
     let app_clone = app_def.clone();
-    let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
     thread::spawn(move || {
         if let Ok(url) = Url::parse(&app_clone.start_url) {
             let _ = fetch_and_cache_icon(&url, &app_clone.icon_id, &paths.icons_cache_dir());
         }
         let descriptor = launcher_descriptor_for(&app_clone, &paths);
         let _ = install_launcher(&descriptor);
-        let _ = sender.send(());
-    });
-    receiver.attach(None, move |_| {
-        refresh_current(handlers);
-        glib::Continue(false)
     });
 
     Ok(())

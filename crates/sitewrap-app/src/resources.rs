@@ -1,13 +1,13 @@
 use anyhow::Result;
-use gio::Resource;
-use glib::Bytes;
+use gtk4::gio;
+use gtk4::glib;
 
 pub fn register() -> Result<()> {
-    let bytes = Bytes::from_static(include_bytes!(concat!(
+    let bytes = glib::Bytes::from_static(include_bytes!(concat!(
         env!("OUT_DIR"),
         "/sitewrap.gresource"
     )));
-    let resource = Resource::from_data(&bytes)?;
-    resource.register();
+    let resource = gio::Resource::from_data(&bytes)?;
+    gio::resources_register(&resource);
     Ok(())
 }

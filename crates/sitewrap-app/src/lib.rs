@@ -2,11 +2,11 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use adw::Application;
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use gtk4 as gtk;
+use gtk4::glib;
 use sitewrap_engine as engine;
 use sitewrap_model::{AppPaths, AppRegistry, PermissionRepository, WebAppId};
-use sitewrap_portal;
 use tracing::error;
 
 mod manager;
@@ -14,7 +14,7 @@ mod permissions_ui;
 mod resources;
 mod shell;
 
-const APP_ID: &str = "xyz.andriishafar.Sitewrap";
+pub const APP_ID: &str = "xyz.andriishafar.Sitewrap";
 
 #[derive(Clone, Debug)]
 pub enum AppMode {
@@ -58,10 +58,9 @@ pub fn run(mode: AppMode) -> Result<()> {
         }
     });
 
-    // Placeholder message-loop pump for future CEF integration.
     glib::timeout_add_local(std::time::Duration::from_millis(16), || {
         engine::tick();
-        glib::Continue(true)
+        glib::ControlFlow::Continue
     });
 
     app.run();
@@ -76,10 +75,6 @@ fn on_activate(app: &Application, ctx: Rc<AppContext>, mode: AppMode) -> Result<
     }
 }
 
-fn builder_from_resource(path: &str) -> Result<gtk::Builder> {
-    Ok(gtk::Builder::from_resource(path))
+fn builder_from_resource(path: &str) -> gtk::Builder {
+    gtk::Builder::from_resource(path)
 }
-
-pub(crate) use builder_from_resource;
-pub(crate) use AppContext;
-pub(crate) use APP_ID;

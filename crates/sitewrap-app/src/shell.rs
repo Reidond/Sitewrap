@@ -1,17 +1,16 @@
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
-use adw::prelude::MessageDialogExtManual;
 use adw::prelude::*;
 use anyhow::{anyhow, Context, Result};
 use gdk4 as gdk;
-use gio::prelude::*;
 use gtk4 as gtk;
-use gtk4::prelude::GtkDialogExtManual;
+use gtk4::gio;
+use gtk4::glib;
 use sitewrap_engine::{Engine, EngineConfig};
-use sitewrap_model::{
-    PerOriginPermissions, PermissionState, PermissionStore, WebAppDefinition, WebAppId,
-};
-use sitewrap_portal::{self, NotificationRequest, SaveFileRequest};
+use sitewrap_model::{PermissionState, PermissionStore, WebAppDefinition, WebAppId};
+use sitewrap_portal::{self, NotificationRequest};
+use time::OffsetDateTime;
+use url::Url;
 
 use crate::{builder_from_resource, permissions_ui::*, AppContext};
 
@@ -35,7 +34,7 @@ pub fn show(app: &adw::Application, ctx: Rc<AppContext>, app_id: WebAppId) -> Re
         .load(app_id)
         .with_context(|| format!("load web app {app_id}"))?;
 
-    let builder = builder_from_resource(SHELL_UI)?;
+    let builder = builder_from_resource(SHELL_UI);
     let window: adw::ApplicationWindow = builder
         .object("shell_window")
         .context("shell_window missing in blueprint")?;
@@ -58,10 +57,10 @@ pub fn show(app: &adw::Application, ctx: Rc<AppContext>, app_id: WebAppId) -> Re
     window.set_title(Some(&app_def.name));
     window.set_application(Some(app));
     title.set_title(&app_def.name);
-    title.set_subtitle(Some(&app_def.primary_origin));
+    title.set_subtitle(&app_def.primary_origin);
 
     // Update last launched and persist so manager reflects launches from shell.
-    app_def.last_launched_at = Some(time::OffsetDateTime::now_utc());
+    app_def.last_launched_at = Some(OffsetDateTime::now_utc());
     ctx.registry.save(&app_def)?;
 
     let engine = Rc::new(Engine::new(EngineConfig::new(
@@ -71,13 +70,17 @@ pub fn show(app: &adw::Application, ctx: Rc<AppContext>, app_id: WebAppId) -> Re
     let state_placeholder = Rc::new(RefCell::new(None::<Rc<ShellState>>));
     let view = {
         let state_placeholder = Rc::clone(&state_placeholder);
-        engine_for_nav.build_web_view_with_handler(&app_def.start_url, move |target| {
-            if let Some(state) = state_placeholder.borrow().as_ref() {
-                if let Err(err) = handle_navigation_request(state, &target) {
-                    tracing::error!(target: "ui", "navigation handler failed: {err:?}");
+        engine_for_nav.build_web_view_with_handler(
+            &app_def.start_url,
+            move |target| {
+                if let Some(state) = state_placeholder.borrow().as_ref() {
+                    if let Err(err) = handle_navigation_request(state, &target) {
+                        tracing::error!(target: "ui", "navigation handler failed: {err:?}");
+                    }
                 }
-            }
-        })?
+            },
+            |_permission| {},
+        )?
     };
     view.set_hexpand(true);
     view.set_vexpand(true);
@@ -112,7 +115,7 @@ fn is_external_navigation(app_def: &WebAppDefinition, target: &str) -> bool {
     if !app_def.behavior.open_external_links {
         return false;
     }
-    if let Ok(url) = url::Url::parse(target) {
+    if let Ok(url) = Url::parse(target) {
         let origin = url.origin().ascii_serialization();
         origin != app_def.primary_origin
     } else {
@@ -242,8 +245,7 @@ fn build_shell_menu() -> gio::Menu {
 }
 
 fn setup_nav_bar(state: &Rc<ShellState>) {
-    // Clear any existing children to avoid duplicates on rebuilds.
-    for child in state.nav_bar.children() {
+    while let Some(child) = state.nav_bar.first_child() {
         state.nav_bar.remove(&child);
     }
 
@@ -291,11 +293,10 @@ fn reload_view(state: &ShellState) -> Result<()> {
     let view = engine.build_web_view(&url)?;
     view.set_hexpand(true);
     view.set_vexpand(true);
-    for child in state.content.children() {
+    while let Some(child) = state.content.first_child() {
         state.content.remove(&child);
     }
     state.content.append(&view);
-    state.content.show();
     state.view.replace(view);
     show_toast(state, "Reloaded");
     Ok(())
@@ -386,7 +387,7 @@ async fn handle_notification_prompt_async(state: Rc<ShellState>, origin: String)
         .load(state.app_def.id)
         .context("load permissions")?;
     let entry = store.get_or_default_mut(&origin);
-    entry.notifications = decision;
+    entry.notifications = decision.clone();
     state
         .ctx
         .permissions
@@ -422,9 +423,15 @@ async fn prompt_notification_permission_async(
     dialog.set_default_response(Some("allow"));
     dialog.set_close_response("block");
 
-    let response = dialog.run_future().await;
-    dialog.close();
-    let decision = if response.as_str() == "allow" {
+    let (sender, receiver) = async_channel::bounded::<String>(1);
+    dialog.connect_response(None, move |d, resp| {
+        let _ = sender.send_blocking(resp.to_string());
+        d.close();
+    });
+    dialog.present();
+
+    let response = receiver.recv().await.unwrap_or_else(|_| "block".to_string());
+    let decision = if response == "allow" {
         PermissionState::Allow
     } else {
         PermissionState::Block
@@ -487,8 +494,10 @@ fn open_permissions_window(state: &Rc<ShellState>) -> Result<()> {
         repo: &sitewrap_model::PermissionRepository,
         app_id: WebAppId,
     ) {
-        for child in page.children() {
-            page.remove(&child);
+        while let Some(child) = page.first_child() {
+            if let Some(group) = child.downcast_ref::<adw::PreferencesGroup>() {
+                page.remove(group);
+            }
         }
 
         let mut origins: BTreeMap<String, PermissionSnapshot> = BTreeMap::new();
@@ -556,7 +565,7 @@ fn open_permissions_window(state: &Rc<ShellState>) -> Result<()> {
         let page_clone = page.clone();
         let store_clone = Rc::clone(store);
         let repo_clone = repo.clone();
-        add_origin_row(&page, move |origin| {
+        add_origin_row(page.clone(), move |origin| {
             store_clone.borrow_mut().get_or_default_mut(origin);
             if let Err(err) = repo_clone.save(app_id, &store_clone.borrow()) {
                 tracing::error!(target: "ui", "save permissions failed: {err:?}");
@@ -583,7 +592,7 @@ fn confirm_clear_data(state: &Rc<ShellState>) {
     dialog.set_default_response(Some("cancel"));
     dialog.set_close_response("cancel");
     let state_clear = Rc::clone(state);
-    dialog.connect_response(move |d, resp| {
+    dialog.connect_response(None, move |d, resp| {
         if resp == "clear" {
             if let Err(err) = run_clear_data(&state_clear) {
                 tracing::error!(target: "ui", "clear data failed: {err:?}");
@@ -620,11 +629,10 @@ fn run_clear_data(state: &ShellState) -> Result<()> {
     let view = new_engine.build_web_view(&url)?;
     view.set_hexpand(true);
     view.set_vexpand(true);
-    for child in state.content.children() {
+    while let Some(child) = state.content.first_child() {
         state.content.remove(&child);
     }
     state.content.append(&view);
-    state.content.show();
     state.view.replace(view);
     state.engine.replace(new_engine);
     state.current_url.replace(url);
@@ -658,7 +666,7 @@ fn show_error_dialog(state: &ShellState, heading: &str, err: &anyhow::Error) {
     dialog.add_response("close", "OK");
     dialog.set_default_response(Some("close"));
     dialog.set_close_response("close");
-    dialog.connect_response(|d, _| d.close());
+    dialog.connect_response(None, |d, _| d.close());
     dialog.present();
 }
 

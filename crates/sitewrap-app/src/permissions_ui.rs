@@ -1,6 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use adw::prelude::*;
+use gtk4 as gtk;
+use gtk4::glib;
 use sitewrap_model::{
     PerOriginPermissions, PermissionRepository, PermissionState, PermissionStore, WebAppId,
 };
@@ -14,6 +16,7 @@ pub enum PermissionField {
     Location,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn add_permission_row(
     group: &adw::PreferencesGroup,
     title: &str,
@@ -42,7 +45,7 @@ pub fn add_permission_row(
     group.add(&row);
 }
 
-pub fn add_origin_row(page: &adw::PreferencesPage, build_group: impl Fn(&str) + 'static) {
+pub fn add_origin_row(page: adw::PreferencesPage, build_group: impl Fn(&str) + 'static) {
     let row = adw::ActionRow::builder()
         .title("Add origin")
         .subtitle("Enter a site URL (saved immediately)")
