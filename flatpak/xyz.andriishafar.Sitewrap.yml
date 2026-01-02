@@ -1,6 +1,6 @@
 app-id: xyz.andriishafar.Sitewrap
 runtime: org.gnome.Platform
-runtime-version: "47"
+runtime-version: "49"
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
@@ -26,25 +26,29 @@ modules:
     buildsystem: simple
     build-commands:
       - install -d /app/cef
-      - echo "TODO: install CEF bundle here" > /app/cef/README.cef
+      - 'echo "TODO: install CEF bundle here" > /app/cef/README.cef'
 
   - name: sitewrap
     buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/sitewrap/cargo
     build-commands:
-      - cargo build --release --offline
+      - |
+        mkdir -p .cargo
+        cat > .cargo/config.toml << EOF
+        [source.crates-io]
+        replace-with = "vendored-sources"
+        [source.vendored-sources]
+        directory = "cargo/vendor"
+        EOF
+      - cargo --offline build --release
       - install -Dm755 target/release/sitewrap /app/bin/sitewrap
-      - install -Dm644 xyz.andriishafar.Sitewrap.desktop /app/share/applications/xyz.andriishafar.Sitewrap.desktop
-      - install -Dm644 icons/xyz.andriishafar.Sitewrap.svg /app/share/icons/hicolor/scalable/apps/xyz.andriishafar.Sitewrap.svg
-      - install -Dm644 xyz.andriishafar.Sitewrap.metainfo.xml /app/share/metainfo/xyz.andriishafar.Sitewrap.metainfo.xml
+      - install -Dm644 flatpak/xyz.andriishafar.Sitewrap.desktop /app/share/applications/xyz.andriishafar.Sitewrap.desktop
+      - install -Dm644 flatpak/icons/xyz.andriishafar.Sitewrap.svg /app/share/icons/hicolor/scalable/apps/xyz.andriishafar.Sitewrap.svg
+      - install -Dm644 flatpak/xyz.andriishafar.Sitewrap.metainfo.xml /app/share/metainfo/xyz.andriishafar.Sitewrap.metainfo.xml
     sources:
       - type: dir
         path: ..
-      # Generate with flatpak-cargo-generator for reproducible builds
-      - type: file
-        path: cargo-sources.json
-      - type: file
-        path: xyz.andriishafar.Sitewrap.metainfo.xml
-      - type: file
-        path: xyz.andriishafar.Sitewrap.desktop
-      - type: file
-        path: icons/xyz.andriishafar.Sitewrap.svg
+      - cargo-sources.json

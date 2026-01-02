@@ -108,7 +108,10 @@ cargo clippy                   # Lint check
 cargo run -- --manager         # Manager mode
 cargo run -- --shell <uuid>    # Shell mode for specific app
 
-# Flatpak (requires flatpak-builder)
+# To regenerate deps after Cargo.lock changes:
+uv run flatpak/flatpak-cargo-generator.py Cargo.lock -o flatpak/cargo-sources.json
+
+# To build:
 flatpak-builder --user --install build flatpak/xyz.andriishafar.Sitewrap.yml
 ```
 
