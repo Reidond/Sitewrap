@@ -1,7 +1,8 @@
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use gtk4::{prelude::*, Box as GtkBox, Button, Label, Orientation};
 use tracing::info;
 
@@ -37,6 +38,7 @@ pub struct Engine {
     backend: Box<dyn EngineBackend>,
 }
 
+#[allow(clippy::type_complexity)]
 static TICK_HOOK: OnceLock<Mutex<Option<Box<dyn Fn() + Send + Sync>>>> = OnceLock::new();
 
 impl Engine {
@@ -65,7 +67,7 @@ impl Engine {
     }
 
     pub fn build_web_view(&self, start_url: &str) -> Result<gtk4::Widget> {
-        self.build_web_view_with_handler(start_url, |_| {})
+        self.build_web_view_with_handler(start_url, |_| {}, |_| {})
     }
 
     pub fn build_web_view_with_handler<F>(
@@ -138,6 +140,7 @@ trait EngineBackend: 'static {
 }
 
 struct StubBackend {
+    #[allow(dead_code)] // Will be used when CEF is wired
     config: EngineConfig,
 }
 
@@ -146,6 +149,7 @@ impl EngineBackend for StubBackend {
         &self,
         start_url: &str,
         on_navigation: Box<dyn Fn(String) + 'static>,
+        _on_permission: Box<dyn Fn(PermissionKind) + 'static>,
     ) -> Result<gtk4::Widget> {
         let container = GtkBox::builder()
             .orientation(Orientation::Vertical)
@@ -160,10 +164,13 @@ impl EngineBackend for StubBackend {
         label.set_xalign(0.0);
         container.append(&label);
 
+        let on_navigation = Rc::new(on_navigation);
+
         let internal_btn = Button::with_label("Navigate (same origin)");
         let start = start_url.to_string();
+        let nav_clone = on_navigation.clone();
         internal_btn.connect_clicked(move |_| {
-            on_navigation(start.clone());
+            nav_clone(start.clone());
         });
 
         let external_btn = Button::with_label("Navigate external example.org");
@@ -181,6 +188,7 @@ impl EngineBackend for StubBackend {
 /// Placeholder backend selected when CEF assets are detected but no compiled bindings are present.
 /// Keeps runtime behavior consistent while signaling that CEF is available once wired.
 struct PlaceholderCefBackend {
+    #[allow(dead_code)] // Will be used when CEF is wired
     config: EngineConfig,
 }
 
@@ -189,6 +197,7 @@ impl EngineBackend for PlaceholderCefBackend {
         &self,
         start_url: &str,
         on_navigation: Box<dyn Fn(String) + 'static>,
+        _on_permission: Box<dyn Fn(PermissionKind) + 'static>,
     ) -> Result<gtk4::Widget> {
         let container = GtkBox::builder()
             .orientation(Orientation::Vertical)
@@ -205,10 +214,13 @@ impl EngineBackend for PlaceholderCefBackend {
         label.set_xalign(0.0);
         container.append(&label);
 
+        let on_navigation = Rc::new(on_navigation);
+
         let internal_btn = Button::with_label("Navigate (same origin)");
         let start = start_url.to_string();
+        let nav_clone = on_navigation.clone();
         internal_btn.connect_clicked(move |_| {
-            on_navigation(start.clone());
+            nav_clone(start.clone());
         });
 
         let external_btn = Button::with_label("Navigate external example.org");
