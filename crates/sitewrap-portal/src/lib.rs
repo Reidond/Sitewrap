@@ -1,8 +1,9 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::{Context, Result};
+use ashpd::desktop::file_chooser::SelectedFiles;
 use ashpd::desktop::Icon;
-use ashpd::desktop::{dynamic_launcher, file_chooser, notification, open_uri};
+use ashpd::desktop::{dynamic_launcher, notification, open_uri};
 use ashpd::url::Url;
 use once_cell::sync::Lazy;
 use thiserror::Error;
@@ -154,48 +155,56 @@ pub fn open_uri(uri: &str) -> Result<()> {
 pub fn save_file(request: &SaveFileRequest) -> Result<()> {
     info!(target: "portal", file = %request.suggested_name, "save file via FileChooser portal");
     RUNTIME.block_on(async {
-        let proxy = match file_chooser::FileChooserProxy::new().await {
-            Ok(p) => p,
-            Err(err) => return Err(PortalError::Unavailable.into()).context(err),
-        };
-        let mut options = file_chooser::SaveFileOptions::default()
+        let mut save_request = SelectedFiles::save_file()
+            .title(request.title.as_str())
             .accept_label("Save")
             .modal(true)
-            .current_name(&request.suggested_name);
+            .current_name(request.suggested_name.as_str());
 
         if let Some(dir) = &request.default_directory {
-            options = options.current_folder(dir);
+            save_request = save_request.current_folder(dir).context("set current folder")?;
         }
 
-        let response = proxy
-            .save_file(Some(&request.title), options)
+        let response = save_request
+            .send()
             .await
             .context("open SaveFile portal")?
             .response()
             .context("read SaveFile response")?;
 
-        let Some(file) = response.selected_file() else {
+        let uris = response.uris();
+        let Some(uri) = uris.first() else {
             return Ok(()); // cancelled
         };
 
-        if let Some(path) = file.path() {
-            std::fs::write(path, &request.content).context("write selected file")?;
+        if let Ok(path) = uri.to_file_path() {
+            std::fs::write(&path, &request.content)
+                .with_context(|| format!("write selected file {:?}", path))?;
         } else {
-            // Fallback: attempt portal-provided writer
-            let mut writer = file.write().await.context("open portal writer")?;
-            use tokio::io::AsyncWriteExt;
-            writer
-                .write_all(&request.content)
-                .await
-                .context("write portal file")?;
-            writer.flush().await.context("flush portal file")?;
+            warn!(target: "portal", uri = %uri, "SaveFile returned non-file URI");
         }
         Ok::<_, anyhow::Error>(())
     })
 }
 
-fn file_chooser_available() -> bool {
-    RUNTIME.block_on(async { file_chooser::FileChooserProxy::new().await.is_ok() })
+async fn file_chooser_portal_available() -> bool {
+    let Ok(connection) = ashpd::zbus::Connection::session().await else {
+        return false;
+    };
+
+    let proxy = match ashpd::zbus::Proxy::new(
+        &connection,
+        "org.freedesktop.portal.Desktop",
+        "/org/freedesktop/portal/desktop",
+        "org.freedesktop.portal.FileChooser",
+    )
+    .await
+    {
+        Ok(proxy) => proxy,
+        Err(_) => return false,
+    };
+
+    proxy.get_property::<u32>("version").await.is_ok()
 }
 
 async fn open_uri_portal_available() -> bool {
@@ -231,7 +240,7 @@ pub fn is_open_uri_supported() -> bool {
 }
 
 pub fn is_file_chooser_supported() -> bool {
-    file_chooser_available()
+    RUNTIME.block_on(file_chooser_portal_available())
 }
 
 pub fn warn_if_stubbed() {
