@@ -105,7 +105,7 @@ fn render_gresource_xml(files: &[String]) -> String {
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <gresources>
-  <gresource prefix="/xyz/andriishafar/sitewrap/ui">
+  <gresource prefix="/xyz/andriishafar/sitewrap">
 {file_entries}
   </gresource>
 </gresources>
