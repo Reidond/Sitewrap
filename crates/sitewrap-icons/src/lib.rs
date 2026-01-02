@@ -1,4 +1,9 @@
-use std::{fs, io::Cursor, path::PathBuf, time::Duration};
+use std::{
+    fs,
+    io::Cursor,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use anyhow::{bail, Context, Result};
 use image::{imageops::FilterType, DynamicImage, ImageFormat};
@@ -38,7 +43,7 @@ pub struct IconResult {
 pub fn fetch_and_cache_icon(
     start_url: &Url,
     icon_id: &str,
-    cache_dir: &PathBuf,
+    cache_dir: &Path,
 ) -> Result<IconResult> {
     fs::create_dir_all(cache_dir)?;
 
@@ -50,8 +55,6 @@ pub fn fetch_and_cache_icon(
         .unwrap_or_default();
 
     let candidates = discover_icon_urls(&html, start_url);
-    let mut last_err = None;
-
     for url in candidates {
         match download_and_render(&url, cache_dir, icon_id) {
             Ok(paths) => {
@@ -60,7 +63,7 @@ pub fn fetch_and_cache_icon(
                     rendered_paths: paths,
                 })
             }
-            Err(err) => last_err = Some(err),
+            Err(_) => continue,
         }
     }
 
@@ -99,7 +102,7 @@ fn discover_icon_urls(html: &str, base: &Url) -> Vec<Url> {
     urls
 }
 
-fn download_and_render(url: &Url, cache_dir: &PathBuf, icon_id: &str) -> Result<Vec<PathBuf>> {
+fn download_and_render(url: &Url, cache_dir: &Path, icon_id: &str) -> Result<Vec<PathBuf>> {
     let resp = CLIENT
         .get(url.as_str())
         .send()
@@ -118,25 +121,26 @@ fn download_and_render(url: &Url, cache_dir: &PathBuf, icon_id: &str) -> Result<
     }
     let data = bytes.to_vec();
     let img = decode_icon(&data).context("decode icon image")?;
-    Ok(resize_and_write(&img, cache_dir, icon_id)?)
+    resize_and_write(&img, cache_dir, icon_id)
 }
 
 fn decode_icon(data: &[u8]) -> Result<DynamicImage> {
     if let Ok(dir) = ico::IconDir::read(Cursor::new(data)) {
         if let Some(entry) = dir.entries().iter().max_by_key(|e| e.width()) {
             let decoded = entry.decode().context("decode ico frame")?;
-            return Ok(DynamicImage::from(decoded));
+            let width = decoded.width();
+            let height = decoded.height();
+            let rgba_data = decoded.rgba_data().to_vec();
+            let rgba_image = image::RgbaImage::from_raw(width, height, rgba_data)
+                .context("create rgba image from ico")?;
+            return Ok(DynamicImage::ImageRgba8(rgba_image));
         }
     }
-    let reader = image::io::Reader::new(Cursor::new(data)).with_guessed_format()?;
+    let reader = image::ImageReader::new(Cursor::new(data)).with_guessed_format()?;
     Ok(reader.decode()?)
 }
 
-fn resize_and_write(
-    img: &DynamicImage,
-    cache_dir: &PathBuf,
-    icon_id: &str,
-) -> Result<Vec<PathBuf>> {
+fn resize_and_write(img: &DynamicImage, cache_dir: &Path, icon_id: &str) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for &size in ICON_SIZES {
         let resized = img.resize_exact(size, size, FilterType::Lanczos3);
@@ -149,7 +153,7 @@ fn resize_and_write(
     Ok(paths)
 }
 
-fn generate_fallback(url: &Url, cache_dir: &PathBuf, icon_id: &str) -> Result<Vec<PathBuf>> {
+fn generate_fallback(url: &Url, cache_dir: &Path, icon_id: &str) -> Result<Vec<PathBuf>> {
     let host = url.host_str().unwrap_or("?");
     let initial = host
         .trim_start_matches("www.")
@@ -196,6 +200,6 @@ fn hash_seed(data: &[u8]) -> u64 {
     u64::from_le_bytes(out[0..8].try_into().unwrap())
 }
 
-pub fn cache_dir_from_base(base: &PathBuf) -> PathBuf {
+pub fn cache_dir_from_base(base: &Path) -> PathBuf {
     base.join("icons")
 }
