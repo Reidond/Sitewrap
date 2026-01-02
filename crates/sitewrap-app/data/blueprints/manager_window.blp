@@ -1,0 +1,59 @@
+using Gtk 4.0;
+using Adw 1;
+
+template manager_window : Adw.ApplicationWindow {
+  title: "Sitewrap";
+  default-width: 960;
+  default-height: 620;
+
+  Adw.ToolbarView {
+    top-bar-style: raised;
+
+    content: Gtk.Box {
+      orientation: vertical;
+      spacing: 12;
+      margin-start: 18;
+      margin-end: 18;
+      margin-top: 12;
+      margin-bottom: 18;
+
+      Adw.HeaderBar {
+        show-start-title-buttons: true;
+        title-widget: Gtk.Box {
+          orientation: vertical;
+          spacing: 2;
+          Gtk.Label {
+            label: "Sitewrap";
+            css-classes: ["title-1"];
+            halign: start;
+          }
+          Gtk.Label {
+            label: "Manage your installed web apps";
+            css-classes: ["dim-label"];
+            halign: start;
+          }
+        };
+
+        end-widget: Gtk.Button create_button {
+          label: "Create";
+          css-classes: ["suggested-action"];
+          halign: end;
+        };
+      };
+
+      Gtk.SearchEntry search_entry {
+        placeholder-text: "Search apps";
+      };
+
+      Gtk.ScrolledWindow {
+        vexpand: true;
+        child: Gtk.ListBox apps_list {
+          selection-mode: none;
+          hexpand: true;
+          vexpand: true;
+          margin-top: 6;
+        };
+      };
+    };
+  };
+}

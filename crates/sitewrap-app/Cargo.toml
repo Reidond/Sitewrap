@@ -1,0 +1,22 @@
+[package]
+name = "sitewrap-app"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+tracing = { workspace = true }
+once_cell = { workspace = true }
+gtk4 = { workspace = true }
+gdk4 = { workspace = true }
+gio = { workspace = true }
+glib = { workspace = true }
+adw = { workspace = true }
+sitewrap-model = { path = "../sitewrap-model" }
+sitewrap-engine = { path = "../sitewrap-engine" }
+sitewrap-portal = { path = "../sitewrap-portal" }
+sitewrap-icons = { path = "../sitewrap-icons" }
+
+[build-dependencies]
+anyhow = { workspace = true }

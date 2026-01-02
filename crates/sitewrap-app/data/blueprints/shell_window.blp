@@ -1,0 +1,45 @@
+using Gtk 4.0;
+using Adw 1;
+
+template shell_window : Adw.ApplicationWindow {
+  title: "Sitewrap Shell";
+  default-width: 1200;
+  default-height: 800;
+
+  Adw.ToolbarView {
+    top-bar-style: raised;
+
+    top-bar: Adw.HeaderBar {
+      show-start-title-buttons: true;
+
+      title-widget: Adw.WindowTitle shell_title {
+        title: "Sitewrap";
+        subtitle: "Web App";
+      };
+
+      end-widget: Gtk.MenuButton shell_menu_button {
+        icon-name: "open-menu-symbolic";
+        tooltip-text: "Menu";
+      };
+    };
+
+    content: Adw.ToastOverlay shell_toast_overlay {
+      child: Gtk.Box shell_content {
+        orientation: vertical;
+        spacing: 0;
+        hexpand: true;
+        vexpand: true;
+
+        Gtk.Box shell_nav_bar {
+          orientation: horizontal;
+          spacing: 6;
+          margin-start: 12;
+          margin-end: 12;
+          margin-top: 8;
+          margin-bottom: 4;
+          visible: false;
+        };
+      };
+    };
+  };
+}
