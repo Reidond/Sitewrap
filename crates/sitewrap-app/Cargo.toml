@@ -10,9 +10,10 @@ tracing = { workspace = true }
 once_cell = { workspace = true }
 gtk4 = { workspace = true }
 gdk4 = { workspace = true }
-gio = { workspace = true }
-glib = { workspace = true }
-adw = { workspace = true }
+adw = { workspace = true, features = ["v1_2"] }
+time = { workspace = true }
+url = { workspace = true }
+async-channel = "2.3"
 sitewrap-model = { path = "../sitewrap-model" }
 sitewrap-engine = { path = "../sitewrap-engine" }
 sitewrap-portal = { path = "../sitewrap-portal" }
