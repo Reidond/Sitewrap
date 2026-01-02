@@ -1,0 +1,11 @@
+target/
+**/*.rs.bk
+*.log
+*.tmp
+*.swp
+*.swo
+Cargo.lock
+flatpak/.flatpak-builder/
+flatpak/build/
+flatpak/exports/
+.code
