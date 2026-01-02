@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Sitewrap
+Comment=Turn any website into a web app
+Exec=sitewrap --manager
+Icon=xyz.andriishafar.Sitewrap
+Terminal=false
+Type=Application
+Categories=Network;WebBrowser;
+StartupNotify=true

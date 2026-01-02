@@ -1,0 +1,50 @@
+app-id: xyz.andriishafar.Sitewrap
+runtime: org.gnome.Platform
+runtime-version: "47"
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: sitewrap
+finish-args:
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --share=ipc
+  - --talk-name=org.freedesktop.portal.Desktop
+  # CEF runtime expectations (placeholders until the cef module is filled in)
+  - --env=SITEWRAP_CEF_ROOT=/app/lib/cef
+  - --env=CEF_ROOT=/app/lib/cef
+  - --env=LD_LIBRARY_PATH=/app/lib/cef:/app/lib
+  - --env=CEF_FORCE_SANDBOX=0
+  # Uncomment if audio/WebRTC is needed sooner
+  # - --socket=pulseaudio
+  # - --socket=pipewire-0
+modules:
+  # Placeholder CEF module: replace with a concrete source (prebuilt bundle or build)
+  - name: cef
+    buildsystem: simple
+    build-commands:
+      - install -d /app/cef
+      - echo "TODO: install CEF bundle here" > /app/cef/README.cef
+
+  - name: sitewrap
+    buildsystem: simple
+    build-commands:
+      - cargo build --release --offline
+      - install -Dm755 target/release/sitewrap /app/bin/sitewrap
+      - install -Dm644 xyz.andriishafar.Sitewrap.desktop /app/share/applications/xyz.andriishafar.Sitewrap.desktop
+      - install -Dm644 icons/xyz.andriishafar.Sitewrap.svg /app/share/icons/hicolor/scalable/apps/xyz.andriishafar.Sitewrap.svg
+      - install -Dm644 xyz.andriishafar.Sitewrap.metainfo.xml /app/share/metainfo/xyz.andriishafar.Sitewrap.metainfo.xml
+    sources:
+      - type: dir
+        path: ..
+      # Generate with flatpak-cargo-generator for reproducible builds
+      - type: file
+        path: cargo-sources.json
+      - type: file
+        path: xyz.andriishafar.Sitewrap.metainfo.xml
+      - type: file
+        path: xyz.andriishafar.Sitewrap.desktop
+      - type: file
+        path: icons/xyz.andriishafar.Sitewrap.svg

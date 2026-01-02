@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>xyz.andriishafar.Sitewrap</id>
+  <name>Sitewrap</name>
+  <summary>Turn any website into a web app with sandboxed portals</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <description>
+    <p>Sitewrap lets you create standalone web apps from any URL, with per-app profiles, desktop launchers, and portal-based integrations.</p>
+  </description>
+  <categories>
+    <category>Network</category>
+    <category>WebBrowser</category>
+  </categories>
+  <launchable type="desktop-id">xyz.andriishafar.Sitewrap.desktop</launchable>
+  <releases>
+    <release version="0.1.0" date="2026-01-02" />
+  </releases>
+  <content_rating type="oars-1.1" />
+</component>
