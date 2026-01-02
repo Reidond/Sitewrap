@@ -494,10 +494,13 @@ fn open_permissions_window(state: &Rc<ShellState>) -> Result<()> {
         repo: &sitewrap_model::PermissionRepository,
         app_id: WebAppId,
     ) {
-        while let Some(child) = page.first_child() {
+        let mut child_opt = page.first_child();
+        while let Some(child) = child_opt {
+            let next = child.next_sibling();
             if let Some(group) = child.downcast_ref::<adw::PreferencesGroup>() {
                 page.remove(group);
             }
+            child_opt = next;
         }
 
         let mut origins: BTreeMap<String, PermissionSnapshot> = BTreeMap::new();

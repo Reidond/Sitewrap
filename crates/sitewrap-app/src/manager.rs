@@ -9,7 +9,6 @@ use gtk4::glib;
 use sitewrap_icons::fetch_and_cache_icon;
 use sitewrap_model::{normalize_url, AppPaths, WebAppDefinition, WebAppId};
 use sitewrap_portal::{install_launcher, remove_launcher, warn_if_stubbed, LauncherDescriptor};
-use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use url::Url;
 
@@ -24,6 +23,7 @@ struct Handlers {
     list: gtk::ListBox,
     search_entry: gtk::SearchEntry,
     window: adw::ApplicationWindow,
+    main_stack: gtk::Stack,
 }
 
 fn desktop_id_for(app: &WebAppDefinition) -> String {
@@ -57,6 +57,9 @@ pub fn show(app: &adw::Application, ctx: Rc<AppContext>) -> Result<()> {
     let search_entry: gtk::SearchEntry = builder
         .object("search_entry")
         .context("search_entry missing in blueprint")?;
+    let main_stack: gtk::Stack = builder
+        .object("main_stack")
+        .context("main_stack missing in blueprint")?;
 
     window.set_application(Some(app));
 
@@ -83,6 +86,7 @@ pub fn show(app: &adw::Application, ctx: Rc<AppContext>) -> Result<()> {
         list: list.clone(),
         search_entry: search_entry.clone(),
         window: window.clone(),
+        main_stack: main_stack.clone(),
     };
 
     let refresh_list = {
@@ -119,6 +123,12 @@ fn refresh_listbox(
     query: &str,
     handlers: &Handlers,
 ) {
+    if apps.is_empty() {
+        handlers.main_stack.set_visible_child_name("empty");
+    } else {
+        handlers.main_stack.set_visible_child_name("list");
+    }
+
     while let Some(child) = list.first_child() {
         list.remove(&child);
     }
@@ -147,91 +157,19 @@ fn refresh_listbox(
 }
 
 fn make_row(app: &WebAppDefinition, handlers: &Handlers) -> gtk::Widget {
-    let row = gtk::ListBoxRow::builder()
-        .selectable(false)
-        .activatable(false)
-        .build();
-    let root = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(10)
-        .margin_start(12)
-        .margin_end(12)
-        .margin_top(8)
-        .margin_bottom(8)
+    let row = adw::ExpanderRow::builder()
+        .title(&app.name)
+        .subtitle(&app.start_url)
         .build();
 
     let icon = icon_widget(app, &handlers.ctx.paths);
+    row.add_prefix(&icon);
 
-    let r#box = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(4)
-        .hexpand(true)
+    let launch_btn = gtk::Button::builder()
+        .label("Launch")
+        .valign(gtk::Align::Center)
+        .css_classes(["suggested-action"])
         .build();
-    let title = gtk::Label::builder()
-        .label(&app.name)
-        .xalign(0.0)
-        .css_classes(["title-3"])
-        .ellipsize(gtk::pango::EllipsizeMode::End)
-        .build();
-    let subtitle = gtk::Label::builder()
-        .label(&app.start_url)
-        .xalign(0.0)
-        .ellipsize(gtk::pango::EllipsizeMode::End)
-        .wrap(true)
-        .css_classes(["dim-label"])
-        .build();
-    let behavior_label = gtk::Label::builder()
-        .label(format!(
-            "External: {} • Nav: {}",
-            if app.behavior.open_external_links {
-                "On"
-            } else {
-                "Off"
-            },
-            if app.behavior.show_navigation {
-                "On"
-            } else {
-                "Off"
-            }
-        ))
-        .xalign(0.0)
-        .css_classes(["dim-label"])
-        .build();
-    let last_launched = gtk::Label::builder()
-        .label(format!("Last launched: {}", format_last_launched(app)))
-        .xalign(0.0)
-        .css_classes(["dim-label"])
-        .build();
-    r#box.append(&title);
-    r#box.append(&subtitle);
-    r#box.append(&behavior_label);
-    r#box.append(&last_launched);
-
-    let actions = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(6)
-        .halign(gtk::Align::Start)
-        .build();
-    let launch_btn = gtk::Button::with_label("Launch");
-    launch_btn.add_css_class("suggested-action");
-    let edit_btn = gtk::Button::with_label("Edit");
-    edit_btn.add_css_class("flat");
-    let permissions_btn = gtk::Button::with_label("Permissions");
-    permissions_btn.add_css_class("flat");
-    let reset_btn = gtk::Button::with_label("Reset data");
-    reset_btn.add_css_class("flat");
-    let remove_btn = gtk::Button::with_label("Remove");
-    remove_btn.add_css_class("destructive-action");
-    actions.append(&launch_btn);
-    actions.append(&edit_btn);
-    actions.append(&permissions_btn);
-    actions.append(&reset_btn);
-    actions.append(&remove_btn);
-    r#box.append(&actions);
-
-    root.append(&icon);
-    root.append(&r#box);
-    row.set_child(Some(&root));
 
     let app_launch = app.clone();
     let handlers_launch = handlers.clone();
@@ -241,33 +179,66 @@ fn make_row(app: &WebAppDefinition, handlers: &Handlers) -> gtk::Widget {
         }
     });
 
+    row.add_action(&launch_btn);
+
+    let last_launched_row = adw::ActionRow::builder()
+        .title("Last Launched")
+        .subtitle(format_last_launched(app))
+        .build();
+    row.add_row(&last_launched_row);
+
+    let edit_row = adw::ActionRow::builder()
+        .title("Edit Details")
+        .activatable(true)
+        .build();
+    edit_row.add_suffix(&gtk::Image::from_icon_name("document-edit-symbolic"));
     let app_edit = app.clone();
     let handlers_edit = handlers.clone();
-    edit_btn.connect_clicked(move |_| {
+    edit_row.connect_activated(move |_| {
         if let Err(err) = open_edit_window(&handlers_edit, &app_edit) {
             tracing::error!(target: "ui", "edit failed: {err:?}");
         }
     });
+    row.add_row(&edit_row);
 
+    let permissions_row = adw::ActionRow::builder()
+        .title("Permissions")
+        .activatable(true)
+        .build();
+    permissions_row.add_suffix(&gtk::Image::from_icon_name("user-info-symbolic"));
     let app_permissions = app.clone();
     let handlers_permissions = handlers.clone();
-    permissions_btn.connect_clicked(move |_| {
+    permissions_row.connect_activated(move |_| {
         if let Err(err) = open_permissions_window_manager(&handlers_permissions, &app_permissions) {
             tracing::error!(target: "ui", "permissions failed: {err:?}");
         }
     });
+    row.add_row(&permissions_row);
 
+    let reset_row = adw::ActionRow::builder()
+        .title("Reset Data")
+        .activatable(true)
+        .build();
+    reset_row.add_suffix(&gtk::Image::from_icon_name("edit-clear-all-symbolic"));
     let app_reset = app.clone();
     let handlers_reset = handlers.clone();
-    reset_btn.connect_clicked(move |_| {
+    reset_row.connect_activated(move |_| {
         confirm_reset(&handlers_reset, &app_reset);
     });
+    row.add_row(&reset_row);
 
+    let remove_row = adw::ActionRow::builder()
+        .title("Remove App")
+        .activatable(true)
+        .css_classes(["destructive-action"])
+        .build();
+    remove_row.add_suffix(&gtk::Image::from_icon_name("user-trash-symbolic"));
     let app_remove = app.clone();
     let handlers_remove = handlers.clone();
-    remove_btn.connect_clicked(move |_| {
+    remove_row.connect_activated(move |_| {
         confirm_remove(&handlers_remove, &app_remove);
     });
+    row.add_row(&remove_row);
 
     row.upcast()
 }
@@ -298,12 +269,33 @@ fn icon_widget(app: &WebAppDefinition, paths: &AppPaths) -> gtk::Widget {
 }
 
 fn format_last_launched(app: &WebAppDefinition) -> String {
-    match app.last_launched_at {
-        Some(ts) => ts
-            .format(&Rfc3339)
-            .unwrap_or_else(|_| ts.date().to_string()),
-        None => "Never".to_string(),
+    let Some(ts) = app.last_launched_at else {
+        return "Never".to_string();
+    };
+
+    let now = OffsetDateTime::now_utc();
+    let diff = now - ts;
+
+    if diff.whole_seconds() < 60 {
+        return "Just now".to_string();
     }
+    if diff.whole_minutes() < 60 {
+        let mins = diff.whole_minutes();
+        return format!("{} minute{} ago", mins, if mins == 1 { "" } else { "s" });
+    }
+    if diff.whole_hours() < 24 {
+        let hours = diff.whole_hours();
+        return format!("{} hour{} ago", hours, if hours == 1 { "" } else { "s" });
+    }
+    if diff.whole_days() < 2 {
+        return "Yesterday".to_string();
+    }
+    if diff.whole_days() < 7 {
+        let days = diff.whole_days();
+        return format!("{} day{} ago", days, if days == 1 { "" } else { "s" });
+    }
+
+    ts.date().to_string()
 }
 
 fn confirm_reset(handlers: &Handlers, app: &WebAppDefinition) {
@@ -713,10 +705,13 @@ fn open_permissions_window_manager(handlers: &Handlers, app: &WebAppDefinition) 
         repo: &sitewrap_model::PermissionRepository,
         app_id: WebAppId,
     ) {
-        while let Some(child) = page.first_child() {
+        let mut child_opt = page.first_child();
+        while let Some(child) = child_opt {
+            let next = child.next_sibling();
             if let Some(group) = child.downcast_ref::<adw::PreferencesGroup>() {
                 page.remove(group);
             }
+            child_opt = next;
         }
 
         let mut origins: Vec<(String, sitewrap_model::PerOriginPermissions)> = store

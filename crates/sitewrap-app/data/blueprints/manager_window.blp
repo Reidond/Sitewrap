@@ -12,19 +12,9 @@ Adw.ApplicationWindow manager_window {
     [top]
     Adw.HeaderBar {
       show-start-title-buttons: true;
-      title-widget: Gtk.Box {
-        orientation: vertical;
-        spacing: 2;
-        Gtk.Label {
-          label: "Sitewrap";
-          styles ["title-1"]
-          halign: start;
-        }
-        Gtk.Label {
-          label: "Manage your installed web apps";
-          styles ["dim-label"]
-          halign: start;
-        }
+      title-widget: Adw.WindowTitle {
+        title: "Sitewrap";
+        subtitle: "Manage your installed web apps";
       };
 
       [end]
@@ -35,25 +25,45 @@ Adw.ApplicationWindow manager_window {
       }
     }
 
-    content: Gtk.Box {
-      orientation: vertical;
-      spacing: 12;
-      margin-start: 18;
-      margin-end: 18;
-      margin-top: 12;
-      margin-bottom: 18;
-
-      Gtk.SearchEntry search_entry {
-        placeholder-text: "Search apps";
+    content: Gtk.Stack main_stack {
+      Gtk.StackPage {
+        name: "empty";
+        child: Adw.StatusPage {
+          icon-name: "web-browser-symbolic";
+          title: "No Web Apps";
+          description: "Click Create to add your first web app";
+          vexpand: true;
+        };
       }
 
-      Gtk.ScrolledWindow {
-        vexpand: true;
-        child: Gtk.ListBox apps_list {
-          selection-mode: none;
-          hexpand: true;
+      Gtk.StackPage {
+        name: "list";
+        child: Gtk.ScrolledWindow {
           vexpand: true;
-          margin-top: 6;
+          hscrollbar-policy: never;
+          
+          child: Adw.Clamp {
+            maximum-size: 800;
+            tightening-threshold: 600;
+            margin-top: 24;
+            margin-bottom: 24;
+            margin-start: 12;
+            margin-end: 12;
+
+            Gtk.Box {
+              orientation: vertical;
+              spacing: 18;
+
+              Gtk.SearchEntry search_entry {
+                placeholder-text: "Search apps";
+              }
+
+              Gtk.ListBox apps_list {
+                selection-mode: none;
+                styles ["boxed-list"]
+              }
+            }
+          };
         };
       }
     };

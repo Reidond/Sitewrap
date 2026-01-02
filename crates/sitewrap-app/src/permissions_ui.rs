@@ -27,11 +27,27 @@ pub fn add_permission_row(
     repo: PermissionRepository,
     app_id: WebAppId,
 ) {
+    if let Ok(url) = Url::parse(&origin) {
+        if let Some(host) = url.host_str() {
+            group.set_title(host);
+        }
+    }
+    group.set_description(Some("Website origin"));
+
     let options = gtk::StringList::new(&["Ask", "Allow", "Block"]);
     let row = adw::ComboRow::builder()
         .title(title)
         .model(&options)
         .build();
+
+    let icon_name = match field {
+        PermissionField::Notifications => "preferences-system-notifications-symbolic",
+        PermissionField::Camera => "camera-video-symbolic",
+        PermissionField::Microphone => "audio-input-microphone-symbolic",
+        PermissionField::Location => "find-location-symbolic",
+    };
+    row.add_prefix(&gtk::Image::from_icon_name(icon_name));
+
     row.set_selected(permission_state_to_index(current));
     row.connect_selected_notify(move |row| {
         let state = index_to_permission_state(row.selected());
@@ -46,45 +62,53 @@ pub fn add_permission_row(
 }
 
 pub fn add_origin_row(page: adw::PreferencesPage, build_group: impl Fn(&str) + 'static) {
-    let row = adw::ActionRow::builder()
-        .title("Add origin")
-        .subtitle("Enter a site URL (saved immediately)")
+    let group = adw::PreferencesGroup::builder()
+        .title("Add Origin")
+        .description("Allow additional websites to request permissions")
         .build();
 
-    let entry = gtk::Entry::builder()
-        .placeholder_text("https://example.com")
-        .hexpand(true)
+    let row = adw::EntryRow::builder()
+        .title("Website URL")
+        .input_purpose(gtk::InputPurpose::Url)
         .build();
-    let button = gtk::Button::with_label("Add");
 
-    button.connect_clicked(glib::clone!(@weak entry => move |_| {
-        let text = entry.text().trim().to_string();
-        if text.is_empty() {
-            return;
-        }
-        let parsed = Url::parse(&text).or_else(|_| Url::parse(&format!("https://{text}")));
-        match parsed {
-            Ok(url) => {
-                let origin = url.origin().ascii_serialization();
-                build_group(&origin);
+    let button = gtk::Button::builder()
+        .icon_name("list-add-symbolic")
+        .valign(gtk::Align::Center)
+        .css_classes(["flat"])
+        .build();
+
+    let build_group = Rc::new(build_group);
+    let logic = {
+        let build_group = build_group.clone();
+        move |row: &adw::EntryRow| {
+            let text = row.text().trim().to_string();
+            if text.is_empty() {
+                return;
             }
-            Err(err) => {
-                tracing::warn!(target: "ui", "invalid origin entered: {err}");
+            let parsed = Url::parse(&text).or_else(|_| Url::parse(&format!("https://{text}")));
+            match parsed {
+                Ok(url) => {
+                    let origin = url.origin().ascii_serialization();
+                    (build_group)(&origin);
+                    row.set_text("");
+                }
+                Err(err) => {
+                    tracing::warn!(target: "ui", "invalid origin entered: {err}");
+                }
             }
         }
-        entry.set_text("");
-    }));
+    };
 
-    let hbox = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(6)
-        .hexpand(true)
-        .build();
-    hbox.append(&entry);
-    hbox.append(&button);
+    let logic_rc = Rc::new(logic);
 
-    row.add_suffix(&hbox);
-    let group = adw::PreferencesGroup::builder().build();
+    let l = logic_rc.clone();
+    row.connect_entry_activated(move |r| l(r));
+
+    let l = logic_rc.clone();
+    button.connect_clicked(glib::clone!(@weak row => move |_| l(&row)));
+
+    row.add_suffix(&button);
     group.add(&row);
     page.add(&group);
 }
