@@ -1,0 +1,18 @@
+[package]
+name = "sitewrap-icons"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+directories = { workspace = true }
+sha2 = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+scraper = "0.22"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico", "webp"] }
+ico = "0.4"
+rusttype = "0.9"
+rand = "0.8"
+once_cell = { workspace = true }

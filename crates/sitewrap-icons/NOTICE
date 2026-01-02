@@ -1,0 +1,8 @@
+Sitewrap Icons
+
+This application bundles the Roboto font for fallback icon rendering when website icons are unavailable.
+
+Roboto-Regular.ttf
+License: Apache-2.0
+License file: LICENSES/Roboto-Apache-2.0.txt
+Upstream: https://github.com/googlefonts/roboto
