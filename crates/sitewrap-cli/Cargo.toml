@@ -1,0 +1,16 @@
+[package]
+name = "sitewrap-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+sitewrap-app = { path = "../sitewrap-app" }
+uuid = { workspace = true }
+
+[[bin]]
+name = "sitewrap"
+path = "src/main.rs"
