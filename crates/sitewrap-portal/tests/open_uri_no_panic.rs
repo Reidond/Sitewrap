@@ -1,8 +1,7 @@
 use sitewrap_portal::open_uri;
 
-// Smoke test for API surface; it does not assert success because portals may be
-// unavailable in CI. It should compile and not panic on call.
 #[test]
+#[ignore = "opens browser when portals are available - run with --ignored in CI only"]
 fn open_uri_api_smoke() {
     let _ = open_uri("https://example.com");
 }
