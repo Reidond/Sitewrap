@@ -1,0 +1,13 @@
+[package]
+name = "sitewrap-portal"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+ashpd = "0.12"
+tokio = { version = "1.39", features = ["macros", "rt-multi-thread", "io-util"], default-features = false }
+once_cell = { workspace = true }
+time = { workspace = true }
