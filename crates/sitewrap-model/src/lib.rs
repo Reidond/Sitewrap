@@ -90,6 +90,15 @@ pub struct BehaviorConfig {
     pub show_navigation: bool,
 }
 
+impl Default for BehaviorConfig {
+    fn default() -> Self {
+        Self {
+            open_external_links: default_open_external_links(),
+            show_navigation: default_show_navigation(),
+        }
+    }
+}
+
 fn default_open_external_links() -> bool {
     true
 }
@@ -126,26 +135,18 @@ impl WebAppDefinition {
             icon_id: format!("xyz.andriishafar.Sitewrap.webapp.{id}"),
             created_at: now,
             last_launched_at: None,
-            behavior: BehaviorConfig {
-                open_external_links: default_open_external_links(),
-                show_navigation: default_show_navigation(),
-            },
+            behavior: BehaviorConfig::default(),
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum PermissionState {
+    #[default]
     Ask,
     Allow,
     Block,
-}
-
-impl Default for PermissionState {
-    fn default() -> Self {
-        PermissionState::Ask
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
