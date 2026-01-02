@@ -1,0 +1,16 @@
+[package]
+name = "sitewrap-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+gtk4 = { workspace = true }
+glib = { workspace = true }
+
+[features]
+default = []
+# Placeholder feature hook for future CEF bindings; currently no extra deps to keep build clean.
+cef = []
